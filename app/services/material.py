@@ -96,9 +96,9 @@ def search_videos_pixabay(
     search_term: str,
     minimum_duration: int,
     video_aspect: VideoAspect = VideoAspect.portrait,
+    lang: str = "en",
 ) -> List[MaterialInfo]:
     aspect = VideoAspect(video_aspect)
-
     video_width, video_height = aspect.to_resolution()
 
     api_key = get_api_key("pixabay_api_keys")
@@ -108,9 +108,11 @@ def search_videos_pixabay(
         "video_type": "all",  # Accepted values: "all", "film", "animation"
         "per_page": 50,
         "key": api_key,
+        "lang": lang,
+        "safesearch": "true",
     }
     query_url = f"https://pixabay.com/api/videos/?{urlencode(params)}"
-    logger.info(f"searching videos: {query_url}, with proxies: {config.proxy}")
+    logger.info(f"searching videos: {query_url}, lang: {lang}")
 
     try:
         r = requests.get(
@@ -128,19 +130,27 @@ def search_videos_pixabay(
             # check if video has desired minimum duration
             if duration < minimum_duration:
                 continue
+
+            # Selection priorities: large -> medium -> small
+            # For 9:16 (1080x1920), we need at least 1080 width to avoid heavy pixelation if cropping from horizontal
             video_files = v["videos"]
-            # loop through each url to determine the best quality
-            for video_type in video_files:
-                video = video_files[video_type]
-                w = int(video["width"])
-                # h = int(video["height"])
-                if w >= video_width:
-                    item = MaterialInfo()
-                    item.provider = "pixabay"
-                    item.url = video["url"]
-                    item.duration = duration
-                    video_items.append(item)
-                    break
+
+            # Try to get best available quality
+            selected_video = None
+            for quality in ["large", "medium", "small"]:
+                if quality in video_files:
+                    video = video_files[quality]
+                    if video["url"] and video["width"] >= (video_width / 2): # at least 50% of target width
+                        selected_video = video
+                        break
+
+            if selected_video:
+                item = MaterialInfo()
+                item.provider = "pixabay"
+                item.url = selected_video["url"]
+                item.duration = duration
+                video_items.append(item)
+
         return video_items
     except Exception as e:
         logger.error(f"search videos failed: {str(e)}")
@@ -220,12 +230,23 @@ def download_videos(
     if source == "pixabay":
         search_videos = search_videos_pixabay
 
+    # Determine search language from UI config
+    ui_lang = config.ui.get("language", "en")
+
     for search_term in search_terms:
-        video_items = search_videos(
-            search_term=search_term,
-            minimum_duration=max_clip_duration,
-            video_aspect=video_aspect,
-        )
+        if source == "pixabay":
+            video_items = search_videos_pixabay(
+                search_term=search_term,
+                minimum_duration=max_clip_duration,
+                video_aspect=video_aspect,
+                lang=ui_lang,
+            )
+        else:
+            video_items = search_videos(
+                search_term=search_term,
+                minimum_duration=max_clip_duration,
+                video_aspect=video_aspect,
+            )
         logger.info(f"found {len(video_items)} videos for '{search_term}'")
 
         for item in video_items:
