@@ -7,9 +7,32 @@ from xml.sax.saxutils import unescape
 
 import edge_tts
 import requests
-from edge_tts import SubMaker, submaker
-from edge_tts.submaker import mktimestamp
+from edge_tts import submaker
 from loguru import logger
+
+def mktimestamp(ticks: float) -> str:
+    """
+    Convert 100-nanosecond ticks to HH:MM:SS.mmm format.
+    """
+    total_seconds = ticks / 10**7
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    seconds = int(total_seconds % 60)
+    milliseconds = int((total_seconds - int(total_seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
+
+class SubMaker:
+    def __init__(self):
+        self.subs = []
+        self.offset = []
+
+    def create_sub(self, offset, text):
+        self.subs.append(text)
+        self.offset.append(offset)
+
+    def feed(self, chunk):
+        if chunk["type"] == "WordBoundary":
+            self.create_sub((chunk["offset"], chunk["duration"]), chunk["text"])
 from moviepy.video.tools import subtitles
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 
@@ -1178,8 +1201,8 @@ def azure_tts_v1(
             logger.info(f"start, voice name: {voice_name}, try: {i + 1}")
 
             async def _do() -> SubMaker:
-                communicate = edge_tts.Communicate(text, voice_name, rate=rate_str)
-                sub_maker = edge_tts.SubMaker()
+                communicate = edge_tts.Communicate(text, voice_name, rate=rate_str, boundary="WordBoundary")
+                sub_maker = SubMaker()
                 with open(voice_file, "wb") as file:
                     async for chunk in communicate.stream():
                         if chunk["type"] == "audio":
@@ -1571,7 +1594,7 @@ def _format_text(text: str) -> str:
     return text
 
 
-def create_subtitle(sub_maker: submaker.SubMaker, text: str, subtitle_file: str):
+def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
     """
     优化字幕文件
     1. 将字幕文件按照标点符号分割成多行
@@ -1685,13 +1708,13 @@ def _get_audio_duration_from_mp3(mp3_file: str) -> float:
         logger.error(f"Failed to get audio duration from MP3: {str(e)}")
         return 0.0
 
-def get_audio_duration( target: Union[str, submaker.SubMaker]) -> float:
+def get_audio_duration(target: Union[str, SubMaker]) -> float:
     """
     获取音频时长
     如果是SubMaker对象，则从SubMaker中获取时长
     如果是MP3文件，则从MP3文件中获取时长
     """
-    if isinstance(target, submaker.SubMaker):
+    if isinstance(target, SubMaker):
         return _get_audio_duration_from_submaker(target)
     elif isinstance(target, str) and target.endswith(".mp3"):
         return _get_audio_duration_from_mp3(target)

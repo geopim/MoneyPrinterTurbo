@@ -59,6 +59,8 @@ def _generate_response(prompt: str) -> str:
                 api_key = config.app.get("gemini_api_key")
                 model_name = config.app.get("gemini_model_name")
                 base_url = config.app.get("gemini_base_url", "")
+                if not base_url:
+                    base_url = "https://generativelanguage.googleapis.com"
             elif llm_provider == "qwen":
                 api_key = config.app.get("qwen_api_key")
                 model_name = config.app.get("qwen_model_name")
@@ -131,7 +133,7 @@ def _generate_response(prompt: str) -> str:
                 except Exception as e:
                     raise Exception(f"[{llm_provider}] error: {str(e)}")
 
-            if llm_provider not in ["pollinations", "ollama"]:  # Skip validation for providers that don't require API key
+            if llm_provider not in ["pollinations", "ollama", "gemini"]:  # Skip validation for providers that don't require API key or have defaults
                 if not api_key:
                     raise ValueError(
                         f"{llm_provider}: api_key is not set, please set it in the config.toml file."
@@ -174,9 +176,9 @@ def _generate_response(prompt: str) -> str:
                 import google.generativeai as genai
 
                 if not base_url:
-                    genai.configure(api_key=api_key, transport="rest")
+                    genai.configure(api_key=api_key, transport="grpc")
                 else:
-                    genai.configure(api_key=api_key, transport="rest", client_options={'api_endpoint': base_url})
+                    genai.configure(api_key=api_key, transport="grpc", client_options={'api_endpoint': base_url})
 
                 generation_config = {
                     "temperature": 0.5,
