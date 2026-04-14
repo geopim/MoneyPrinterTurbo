@@ -2,13 +2,17 @@ import asyncio
 import unittest
 import os
 import sys
+import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.utils import utils
 from app.services import voice as vs
+from app.services import task as task_service
+from pydub import AudioSegment
 
 temp_dir = utils.storage_dir("temp")
 
@@ -100,6 +104,111 @@ class TestVoiceService(unittest.TestCase):
             print(f"voice: {voice_name}, audio duration: {audio_duration}s")
 
         self.loop.run_until_complete(_do())
+
+    def test_gemini_tts_uses_legacy_submaker_fields(self):
+        """
+        验证 Gemini TTS 在 edge_tts 7.x 环境下仍会返回项目兼容的字幕结构，
+        并且可以被 `subtitle_provider=edge` 的字幕生成链路直接消费，
+        避免再次回退 Whisper。
+        """
+
+        class _InlineData:
+            def __init__(self, data):
+                self.data = data
+
+        class _Part:
+            def __init__(self, data):
+                self.inline_data = _InlineData(data)
+
+        class _Content:
+            def __init__(self, data):
+                self.parts = [_Part(data)]
+
+        class _Candidate:
+            def __init__(self, data):
+                self.content = _Content(data)
+
+        class _Response:
+            def __init__(self, data):
+                self.candidates = [_Candidate(data)]
+
+        class _FakeModel:
+            def __init__(self, name):
+                self.name = name
+
+            def generate_content(self, contents, generation_config):
+                tone = (
+                    AudioSegment.silent(duration=1800)
+                    .set_frame_rate(24000)
+                    .set_channels(1)
+                    .set_sample_width(2)
+                )
+                return _Response(tone.raw_data)
+
+        voice_file = f"{temp_dir}/tts-gemini-Zephyr.mp3"
+        subtitle_file = f"{temp_dir}/tts-gemini-Zephyr.srt"
+        text = "Gemini subtitle generation should work now. Testing multiple lines."
+
+        with patch("google.generativeai.configure"), patch(
+            "google.generativeai.GenerativeModel", _FakeModel
+        ), patch.object(vs.config, "app", dict(vs.config.app, gemini_api_key="test-key")):
+            sub_maker = vs.gemini_tts(
+                text=text,
+                voice_name="Zephyr",
+                voice_rate=1.0,
+                voice_file=voice_file,
+            )
+
+        self.assertIsNotNone(sub_maker)
+        self.assertEqual(
+            getattr(sub_maker, "subs", []),
+            ["Gemini subtitle generation should work now", "Testing multiple lines"],
+        )
+        self.assertEqual(len(getattr(sub_maker, "offset", [])), 2)
+        self.assertEqual(sub_maker.offset[0][0], 0)
+        self.assertLess(sub_maker.offset[0][1], sub_maker.offset[1][1])
+
+        vs.create_subtitle(sub_maker=sub_maker, text=text, subtitle_file=subtitle_file)
+        subtitle_content = Path(subtitle_file).read_text(encoding="utf-8")
+        self.assertIn("Gemini subtitle generation should work now", subtitle_content)
+        self.assertIn("Testing multiple lines", subtitle_content)
+
+    def test_generate_subtitle_keeps_edge_provider_for_gemini_legacy_submaker(self):
+        """
+        验证 Gemini TTS 返回的 legacy 字幕结构在 edge provider 下可以直接产出
+        SRT，不会因为匹配失败而回退到 Whisper。
+        """
+        script = "Gemini subtitle generation should work now. Testing multiple lines."
+        sub_maker = vs.populate_legacy_submaker_with_full_text(
+            vs.ensure_legacy_submaker_fields(vs.SubMaker()),
+            script,
+            2.4,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
+            task_service.config,
+            "app",
+            dict(task_service.config.app, subtitle_provider="edge"),
+        ), patch("app.services.subtitle.create") as whisper_create, patch(
+            "app.utils.utils.task_dir",
+            lambda tid="": str(Path(tmp_dir) / tid) if tid else str(Path(tmp_dir)),
+        ):
+            task_id = "gemini-subtitle-edge-task"
+            Path(tmp_dir, task_id).mkdir(parents=True, exist_ok=True)
+            subtitle_path = task_service.generate_subtitle(
+                task_id=task_id,
+                params=type("Params", (), {"subtitle_enabled": True})(),
+                video_script=script,
+                sub_maker=sub_maker,
+                audio_file="",
+            )
+
+            self.assertTrue(subtitle_path.endswith("subtitle.srt"))
+            self.assertTrue(Path(subtitle_path).exists())
+            self.assertFalse(whisper_create.called)
+            subtitle_content = Path(subtitle_path).read_text(encoding="utf-8")
+            self.assertIn("Gemini subtitle generation should work now", subtitle_content)
+            self.assertIn("Testing multiple lines", subtitle_content)
 
 if __name__ == "__main__":
     # python -m unittest test.services.test_voice.TestVoiceService.test_azure_tts_v1

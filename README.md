@@ -53,71 +53,68 @@ Devido ao processo de **implantação** e **uso** deste projeto, existe uma cert
 - [x] Materiais de vídeo em **alta definição** e **livres de direitos autorais**, além de suporte a **materiais locais**
 - [x] Integração com: **OpenAI**, **Moonshot**, **Azure**, **gpt4free**, **one-api**, **Qwen**, **Google Gemini**, **Ollama**, **DeepSeek**, **Pollinations**, **ModelScope** e mais
 
+## Requisitos de Sistema 📦
+
+- **Sistema**: Windows 10, MacOS 11.0+ ou distribuições Linux populares.
+- **GPU**: Não obrigatória, mas recomendada para transcrição local (`faster-whisper`) e processamento mais rápido.
+
+| Item | Mínimo | Recomendado | Ideal |
+| --- | --- | --- | --- |
+| CPU | 4 Cores | 6 a 8 Cores | 8+ Cores |
+| RAM | 4 GB | 8 GB | 16 GB+ |
+| GPU | N/A | 4 GB VRAM+ | 8 GB VRAM+ |
+
 ## Como Rodar via Terminal (Windows) 🚀
 
-Se você deseja rodar o sistema diretamente pelo terminal (Powershell ou CMD), siga estes passos:
+Para rodar o sistema diretamente pelo terminal (Powershell ou CMD), escolha uma das formas abaixo:
 
-1. **Ative o ambiente virtual**:
-   ```powershell
-   .\.venv\Scripts\activate
-   ```
-2. **Execute o Backend**:
-   ```powershell
-   python main.py
-   ```
-3. **Execute a Interface Web (WebUI)**:
-   Em uma **nova janela** de terminal (com o ambiente ativado):
-   ```powershell
-   streamlit run .\webui\Main.py
-   ```
+### 1. Recomendado: Usando `uv` (Mais rápido e estável)
+Se você instalou o [uv](https://docs.astral.sh/uv/):
+```powershell
+uv run python main.py  # Iniciar Backend
+uv run streamlit run ./webui/Main.py # Iniciar WebUI
+```
+
+### 2. Manual (Venv + Pip)
+```powershell
+.\.venv\Scripts\activate
+python main.py  # Iniciar Backend
+streamlit run .\webui\Main.py # Iniciar WebUI
+```
 
 Ou simplesmente execute o arquivo `webui.bat` na raiz do projeto.
 
 ## Usando Vídeos do Pixabay 🎥
 
-Para usar o Pixabay como fonte de seus vídeos, siga estas etapas:
+Para usar o Pixabay como fonte de seus vídeos:
 
-1. **Obtenha uma chave de API**: Crie uma conta no [Pixabay](https://pixabay.com/api/docs/) e copie sua chave de API.
-2. **Configure o `config.toml`**: Abra o arquivo `config.toml` na raiz do projeto e localize as seguintes linhas:
-   ```toml
-   [app]
-   video_source = "pixabay"  # Mude de "pexels" para "pixabay"
-   pixabay_api_keys = [ "SUA_CHAVE_AQUI" ]
-   ```
-3. **Reinicie o sistema**: Após salvar as alterações, os vídeos serão buscados no Pixabay.
-
-## Requisitos do Sistema 📦
-
-- Recomendado mínimo 4 núcleos de CPU, 4G de RAM. GPU não é obrigatória.
-- Windows 10 ou MacOS 11.0 e versões posteriores.
+1. **API Key**: Obtenha sua chave em [Pixabay API](https://pixabay.com/api/docs/).
+2. **Setup**: No arquivo `config.toml`, mude `video_source = "pixabay"` e adicione sua chave em `pixabay_api_keys = [ "SUA_CHAVE_AQUI" ]`.
+3. **Reinicie**: Salve e reinicie o backend e a interface.
 
 ## Instalação e Implantação 📥
 
-### Pré-requisitos
-
-#### ① Clonar o Projeto
-```shell
-git clone https://github.com/harry0703/MoneyPrinterTurbo.git
-```
-
-#### ② Modificar o Arquivo de Configuração
-- Copie o arquivo `config.example.toml` e renomeie para `config.toml`.
-- Configure as chaves de API e o provedor LLM (como Gemini ou OpenAI).
-
-### Implantação com Docker 🐳
-
+### Docker 🐳
 ```shell
 cd MoneyPrinterTurbo
 docker-compose up
 ```
-Acesse a Web Interface em http://localhost:8501.
+Acesse em http://localhost:8501.
+
+### Instalação Manual com `uv`
+```shell
+git clone https://github.com/harry0703/MoneyPrinterTurbo.git
+cd MoneyPrinterTurbo
+uv python install 3.11
+uv sync --frozen
+```
 
 ---
 
 ## Feedback & Sugestões 📢
 
-- Você pode enviar um [issue](https://github.com/harry0703/MoneyPrinterTurbo/issues) ou um [pull request](https://github.com/harry0703/MoneyPrinterTurbo/pulls).
+- Envie um [issue](https://github.com/harry0703/MoneyPrinterTurbo/issues) ou um [pull request](https://github.com/harry0703/MoneyPrinterTurbo/pulls).
 
 ## Licença 📝
 
-Veja o arquivo [`LICENSE`](LICENSE) para mais detalhes.
+Veja o arquivo [`LICENSE`](LICENSE).
